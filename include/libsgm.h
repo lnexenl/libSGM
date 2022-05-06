@@ -135,7 +135,7 @@ namespace sgm {
 
 		LIBSGM_API virtual ~StereoSGM();
 
-		/**
+                /**
 		* Execute stereo semi global matching.
 		* @param left_pixels  A pointer stored input left image.
 		* @param right_pixels A pointer stored input right image.
@@ -146,34 +146,36 @@ namespace sgm {
 		* Note that dst element value would be multiplied StereoSGM::SUBPIXEL_SCALE if subpixel option was enabled.
 		* Value of Invalid disparity is equal to return value of `get_invalid_disparity` member function.
 		*/
-		LIBSGM_API void execute(const void* left_pixels, const void* right_pixels, void* dst);
+                LIBSGM_API void execute(const void* left_pixels, const void* right_pixels, void* dst);
 
-		/**
+                /**
 		* Generate invalid disparity value from Parameter::min_disp and Parameter::subpixel
 		* @attention
 		* Cast properly if you receive disparity value as `unsigned` type.
 		* See sample/movie for an example of this.
 		*/
-		LIBSGM_API int get_invalid_disparity() const;
+                LIBSGM_API int get_invalid_disparity() const;
 
-	private:
-		StereoSGM(const StereoSGM&);
-		StereoSGM& operator=(const StereoSGM&);
+                StereoSGM& operator=(const StereoSGM&);
+                StereoSGM(){};
 
-		void cuda_resource_allocate();
+            private:
+                StereoSGM(const StereoSGM&);
 
-		CudaStereoSGMResources* cu_res_;
+                void cuda_resource_allocate();
 
-		int width_;
-		int height_;
-		int disparity_size_;
-		int input_depth_bits_;
-		int output_depth_bits_;
-		int src_pitch_;
-		int dst_pitch_;
-		EXECUTE_INOUT inout_type_;
-		Parameters param_;
-	};
+                CudaStereoSGMResources* cu_res_;
+
+                int width_;
+                int height_;
+                int disparity_size_;
+                int input_depth_bits_;
+                int output_depth_bits_;
+                int src_pitch_;
+                int dst_pitch_;
+                EXECUTE_INOUT inout_type_;
+                Parameters param_;
+        };
 }
 
 #include "libsgm_wrapper.h"

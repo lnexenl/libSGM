@@ -147,46 +147,49 @@ namespace sgm {
 		if (disparity_size_ != 64 && disparity_size_ != 128 && disparity_size != 256) {
 			width_ = height_ = input_depth_bits_ = output_depth_bits_ = disparity_size_ = 0;
 			throw std::logic_error("disparity size must be 64, 128 or 256");
-		}
-		if (!has_enough_depth(output_depth_bits, disparity_size, param_.min_disp, param_.subpixel)) {
-			width_ = height_ = input_depth_bits_ = output_depth_bits_ = disparity_size_ = 0;
-			throw std::logic_error("output depth bits must be sufficient for representing output value");
-		}
-		if (param_.path_type != PathType::SCAN_4PATH && param_.path_type != PathType::SCAN_8PATH) {
-			width_ = height_ = input_depth_bits_ = output_depth_bits_ = disparity_size_ = 0;
-			throw std::logic_error("Path type must be PathType::SCAN_4PATH or PathType::SCAN_8PATH");
-		}
+                }
+                if (!has_enough_depth(output_depth_bits, disparity_size, param_.min_disp, param_.subpixel)) {
+                    width_ = height_ = input_depth_bits_ = output_depth_bits_ = disparity_size_ = 0;
+                    throw std::logic_error("output depth bits must be sufficient for representing output value");
+                }
+                if (param_.path_type != PathType::SCAN_4PATH && param_.path_type != PathType::SCAN_8PATH) {
+                    width_ = height_ = input_depth_bits_ = output_depth_bits_ = disparity_size_ = 0;
+                    throw std::logic_error("Path type must be PathType::SCAN_4PATH or PathType::SCAN_8PATH");
+                }
 
-		cu_res_ = new CudaStereoSGMResources(width_, height_, disparity_size_, input_depth_bits_, output_depth_bits_, src_pitch, dst_pitch, inout_type_);
-	}
+                cu_res_ = new CudaStereoSGMResources(width_, height_, disparity_size_, input_depth_bits_, output_depth_bits_, src_pitch, dst_pitch, inout_type_);
+        }
 
-	StereoSGM::~StereoSGM() {
-		if (cu_res_) { delete cu_res_; }
-	}
+        StereoSGM::~StereoSGM() {
+            if (cu_res_) {
+                delete cu_res_;
+            }
+        }
 
-	
-	void StereoSGM::execute(const void* left_pixels, const void* right_pixels, void* dst) {
+        StereoSGM::StereoSGM(const StereoSGM& s) {
+        }
+        void StereoSGM::execute(const void* left_pixels, const void* right_pixels, void* dst) {
 
-		const void *d_input_left, *d_input_right;
+            const void *d_input_left, *d_input_right;
 
-		if (is_cuda_input(inout_type_)) {
-			d_input_left = left_pixels;
-			d_input_right = right_pixels;
-		}
-		else {
-			CudaSafeCall(cudaMemcpy(cu_res_->d_src_left.data(), left_pixels, cu_res_->d_src_left.size(), cudaMemcpyHostToDevice));
-			CudaSafeCall(cudaMemcpy(cu_res_->d_src_right.data(), right_pixels, cu_res_->d_src_right.size(), cudaMemcpyHostToDevice));
-			d_input_left = cu_res_->d_src_left.data();
-			d_input_right = cu_res_->d_src_right.data();
-		}
+            if (is_cuda_input(inout_type_)) {
+                d_input_left = left_pixels;
+                d_input_right = right_pixels;
+            }
+            else {
+                CudaSafeCall(cudaMemcpy(cu_res_->d_src_left.data(), left_pixels, cu_res_->d_src_left.size(), cudaMemcpyHostToDevice));
+                CudaSafeCall(cudaMemcpy(cu_res_->d_src_right.data(), right_pixels, cu_res_->d_src_right.size(), cudaMemcpyHostToDevice));
+                d_input_left = cu_res_->d_src_left.data();
+                d_input_right = cu_res_->d_src_right.data();
+            }
 
-		void* d_tmp_left_disp = cu_res_->d_tmp_left_disp.data();
-		void* d_tmp_right_disp = cu_res_->d_tmp_right_disp.data();
-		void* d_left_disp = cu_res_->d_left_disp.data();
-		void* d_right_disp = cu_res_->d_right_disp.data();
+            void* d_tmp_left_disp = cu_res_->d_tmp_left_disp.data();
+            void* d_tmp_right_disp = cu_res_->d_tmp_right_disp.data();
+            void* d_left_disp = cu_res_->d_left_disp.data();
+            void* d_right_disp = cu_res_->d_right_disp.data();
 
-		if (is_cuda_output(inout_type_) && output_depth_bits_ == 16)
-			d_left_disp = dst; // when threre is no device-host copy or type conversion, use passed buffer
+            if (is_cuda_output(inout_type_) && output_depth_bits_ == 16)
+                d_left_disp = dst; // when threre is no device-host copy or type conversion, use passed buffer
 		
 		cu_res_->sgm_engine->execute((uint16_t*)d_tmp_left_disp, (uint16_t*)d_tmp_right_disp,
 			d_input_left, d_input_right, width_, height_, src_pitch_, dst_pitch_, param_);
@@ -197,24 +200,37 @@ namespace sgm {
 		sgm::details::correct_disparity_range((uint16_t*)d_left_disp, width_, height_, dst_pitch_, param_.subpixel, param_.min_disp);
 
 		if (!is_cuda_output(inout_type_) && output_depth_bits_ == 8) {
-			sgm::details::cast_16bit_8bit_array((const uint16_t*)d_left_disp, (uint8_t*)d_tmp_left_disp, dst_pitch_ * height_);
-			CudaSafeCall(cudaMemcpy(dst, d_tmp_left_disp, sizeof(uint8_t) * dst_pitch_ * height_, cudaMemcpyDeviceToHost));
-		}
-		else if (is_cuda_output(inout_type_) && output_depth_bits_ == 8) {
-			sgm::details::cast_16bit_8bit_array((const uint16_t*)d_left_disp, (uint8_t*)dst, dst_pitch_ * height_);
-		}
-		else if (!is_cuda_output(inout_type_) && output_depth_bits_ == 16) {
-			CudaSafeCall(cudaMemcpy(dst, d_left_disp, sizeof(uint16_t) * dst_pitch_ * height_, cudaMemcpyDeviceToHost));
-		}
-		else if (is_cuda_output(inout_type_) && output_depth_bits_ == 16) {
-			// optimize! no-copy!
-		}
-		else {
-			std::cerr << "not impl" << std::endl;
-		}
-	}
+                    sgm::details::cast_16bit_8bit_array((const uint16_t*)d_left_disp, (uint8_t*)d_tmp_left_disp, dst_pitch_ * height_);
+                    CudaSafeCall(cudaMemcpy(dst, d_tmp_left_disp, sizeof(uint8_t) * dst_pitch_ * height_, cudaMemcpyDeviceToHost));
+                }
+                else if (is_cuda_output(inout_type_) && output_depth_bits_ == 8) {
+                    sgm::details::cast_16bit_8bit_array((const uint16_t*)d_left_disp, (uint8_t*)dst, dst_pitch_ * height_);
+                }
+                else if (!is_cuda_output(inout_type_) && output_depth_bits_ == 16) {
+                    CudaSafeCall(cudaMemcpy(dst, d_left_disp, sizeof(uint16_t) * dst_pitch_ * height_, cudaMemcpyDeviceToHost));
+                }
+                else if (is_cuda_output(inout_type_) && output_depth_bits_ == 16) {
+                    // optimize! no-copy!
+                }
+                else {
+                    std::cerr << "not impl" << std::endl;
+                }
+        }
 
-	int StereoSGM::get_invalid_disparity() const {
-		return (param_.min_disp - 1) * (param_.subpixel ? SUBPIXEL_SCALE : 1);
-	}
-}
+        int StereoSGM::get_invalid_disparity() const {
+            return (param_.min_disp - 1) * (param_.subpixel ? SUBPIXEL_SCALE : 1);
+        }
+        StereoSGM& StereoSGM::operator=(const StereoSGM& s) {
+            this->width_ = s.width_;
+            this->height_ = s.height_;
+            this->disparity_size_ = s.disparity_size_;
+            this->input_depth_bits_ = s.input_depth_bits_;
+            this->output_depth_bits_ = s.output_depth_bits_;
+            this->src_pitch_ = s.src_pitch_;
+            this->dst_pitch_ = s.dst_pitch_;
+            this->inout_type_ = s.inout_type_;
+            this->param_ = s.param_;
+            this->cu_res_ = new CudaStereoSGMResources(this->width_, this->height_, this->disparity_size_, this->input_depth_bits_, this->output_depth_bits_, this->src_pitch_, this->dst_pitch_, this->inout_type_);
+            return *this;
+        }
+        }
