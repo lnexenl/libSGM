@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 
 find_package(CUDA REQUIRED)
-
+set(CUDA_ARCH "sm_86")
 if(DEFINED AUTO_DETECT_ARCH AND "${AUTO_DETECT_ARCH}")
 	CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS "Auto")
 	set(CUDA_ARCH "${ARCH_FLAGS}" CACHE STRING "Value of the NVCC -arch option." FORCE)
@@ -20,13 +20,15 @@ SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} ${CUDA_ARCH}")
 file(GLOB STEREOSRCS "*.cu" "*.cpp")
 
 if(LIBSGM_SHARED)
-	CUDA_ADD_LIBRARY(sgm stereo_sgm.cpp ${STEREOSRCS} SHARED)
-	target_link_libraries(sgm ${CUDA_LIBRARIES})
+    CUDA_ADD_LIBRARY(sgm stereo_sgm.cpp ${STEREOSRCS} SHARED)
+    set_target_properties(sgm PROPERTIES CUDA_ARCHITECTURES "35;50;72;86")
+    target_link_libraries(sgm ${CUDA_LIBRARIES})
 	if(BUILD_OPENCV_WRAPPER)
 		target_link_libraries(sgm ${OpenCV_LIBS})
 	endif()
 else()
-	CUDA_ADD_LIBRARY(sgm stereo_sgm.cpp ${STEREOSRCS} STATIC)
+    CUDA_ADD_LIBRARY(sgm stereo_sgm.cpp ${STEREOSRCS} STATIC)
+    set_target_properties(sgm PROPERTIES CUDA_ARCHITECTURES "35;50;72;86")
 endif()
 
 install(
